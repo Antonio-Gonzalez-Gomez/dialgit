@@ -10,18 +10,18 @@ You must first install Dialgit in your Github repositories in this url: https://
 
 After typing "dg!start", you can request one of several actions. Try to keep your petitions simple so DialGit can understand, for example "I want to add a Github issue". Here's a list of all things you can ask DialGit to do:
 
-### Show this help message.
-### Create an issue in a Github repository.
-### Create a workspace in a Github repository.
-### List all workspaces in a Github repository.
-### List all Sprints in a Github workspace.
-### Modify the Sprint configuration in a Github workspace.
-### Perform a status report of your remaining work for an ongoing Github Sprint.
-### Perform a group analysis of a Github Sprint.
-### Perform an individual analysis of a Github Sprint.
-### Create a board in a Gitlab repository.
-### List all boards in a Gitlab repository.
-### Create an issue in a Gitlab repository.
+- Show this help message.
+- Create an issue in a Github repository.
+- Create a workspace in a Github repository.
+- List all workspaces in a Github repository.
+- List all Sprints in a Github workspace.
+- Modify the Sprint configuration in a Github workspace.
+- Perform a status report of your remaining work for an ongoing Github Sprint.
+- Perform a group analysis of a Github Sprint.
+- Perform an individual analysis of a Github Sprint.
+- Create a board in a Gitlab repository.
+- List all boards in a Gitlab repository.
+- Create an issue in a Gitlab repository.
 
 ## How do I interact with the bot?
 
