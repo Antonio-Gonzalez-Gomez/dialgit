@@ -17,6 +17,7 @@ import org.apache.logging.log4j.Logger;
 
 import managers.Secrets;
 
+//Demo para la API DialogFlow
 public final class DialogFlowDemo {
     private static final String CREDENTIALS = Secrets.GOOGLE_CREDENTIALS;
     private static final String PROJECT = Secrets.GOOGLE_PROJECT_ID;

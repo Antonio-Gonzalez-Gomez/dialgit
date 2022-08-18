@@ -7,13 +7,14 @@ import javax.persistence.Id;
 import javax.persistence.Table;
 
 @Entity
-@Table(name = "usuario")
-public class User implements Serializable {
+@Table(name = "member")
+public class Member implements Serializable {
+    
     @Id
-    @Column(name = "usuario_id", unique = true)
+    @Column(name = "id", unique = true)
     private long id;
 
-    @Column(name = "usuario_name", nullable = false)
+    @Column(name = "name", nullable = false)
     private String name;
 
     public long getId() {

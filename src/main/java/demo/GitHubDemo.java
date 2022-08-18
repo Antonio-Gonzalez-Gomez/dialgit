@@ -10,6 +10,7 @@ import org.kohsuke.github.GitHubBuilder;
 import managers.GithubManager;
 import managers.Secrets;
 
+//Demo para la API de Github
 public final class GitHubDemo {
     private static final String APP_ID = Secrets.GITHUB_APP_ID;
     private static final Logger log = LogManager.getLogger();
@@ -24,7 +25,7 @@ public final class GitHubDemo {
             GHAppInstallation appInstallation = appConnection.getApp().getInstallationById(installationID);
             GHAppInstallationToken appInstallationToken = appInstallation.createToken().create();
             GitHub repoConnection = GitHub.connect(APP_ID, appInstallationToken.getToken());
-            
+
             GHIssue issue = repoConnection.getRepository("Antonio-Gonzalez-Gomez/mvg-blender").getIssue(4);
             log.info("Issue title: " + issue.getTitle());
             log.info("Issue body: " + issue.getBody());

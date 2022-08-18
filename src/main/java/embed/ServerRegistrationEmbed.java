@@ -1,7 +1,7 @@
 package embed;
 
 import java.util.ArrayList;
-import java.util.function.BiPredicate;
+import java.util.function.Predicate;
 
 import org.kohsuke.github.GHRepository;
 
@@ -11,67 +11,72 @@ import discord4j.core.object.reaction.ReactionEmoji;
 import discord4j.core.spec.EmbedCreateSpec;
 import discord4j.rest.util.Color;
 import managers.App;
+import managers.GitlabManager;
+import pojo.Group;
 
 public class ServerRegistrationEmbed extends EmbedManager{
+    
+    private String path;
+    private Predicate<String> checkGroupPredicate;
+    private Predicate<String> groupRegistrationCallback;
 
-    private String author;
-    private String repoName;
-    private BiPredicate<String, String> serverRegistrationCallback;
-    private BiPredicate<String, String> checkRepoCallback;
-
-    public ServerRegistrationEmbed(String userId, String serverId, MessageChannel canal,
-            GatewayDiscordClient gateway, GHRepository repo, boolean readOnly,
-            BiPredicate<String, String> serverRegistrationCallback,
-            BiPredicate<String, String> checkRepoCallback) {
+    public ServerRegistrationEmbed(String userId, String serverId, MessageChannel canal, GatewayDiscordClient gateway,
+            GHRepository repo, Boolean readOnly, Predicate<String> checkGroupPredicate,
+            Predicate<String> groupRegistrationCallback) {
         super(userId, serverId, canal, gateway, repo, readOnly);
-        this.serverRegistrationCallback = serverRegistrationCallback;
-        this.checkRepoCallback = checkRepoCallback;
+        this.path = null;
+        this.checkGroupPredicate = checkGroupPredicate;
+        this.groupRegistrationCallback = groupRegistrationCallback;
         this.actions = new ArrayList<>();
         this.actions.add(ReactionEmoji.unicode("❓"));
         this.actions.add(ReactionEmoji.unicode("❌"));
         this.actions.add(ReactionEmoji.unicode("✅"));
         updateEmbed();
     }
-
+    
     public void addData(String data) {
-        log.info("Adding data: " + data);
-        this.error = null;
+        log.info("Adding group data: " + data);
+        error = null;
         String semiUrl = data.replace(".git","");
         semiUrl = semiUrl.replace("https://", "");
-        semiUrl = semiUrl.replace("github.com/", "");
+        semiUrl = semiUrl.replace("gitlab.com/", "");
         String[] splits = semiUrl.split("/");
-        if (checkRepoCallback.test(splits[0], splits[1])) {
-            this.author = splits[0];
-            this.repoName = splits[1];
+        if (checkGroupPredicate.test(splits[0])) {
+            path = splits[0];
         } else
-            this.error = "No repository was found at " + data;
+            error = "No GitLab group was found at " + data;
         updateEmbed();
-        updateMessage();
+        
     }
 
     private void updateEmbed() {
-        if (author == null) {
+        if (path == null) {
             emb = EmbedCreateSpec.builder()
             .color(Color.RUBY)
-            .title("Repository registration")
-            .description("No GitHub repository with Dialgit installed was found")
+            .title("Group registration")
+            .description("No GitLab group was found")
             .build();
         } else {
+            Group group = GitlabManager.getGroup(path);
+            String strProjects = listParse(group.getProjects(), 99);
+            String strMembers = listParse(group.getMembers(), 99);
             emb = EmbedCreateSpec.builder()
             .color(Color.RUBY)
-            .title("Repository registration")
-            .description("Would you like to register this GitHub repository?")
-            .addField("Author", author, false)
-            .addField("Repository", repoName, false)
+            .title("Group registration")
+            .description("Would you like to register this GitLab group?")
+            .addField("Name", group.getName(), false)
+            .addField("URL", group.getUrl(), false)
+            .addField("Projects", strProjects, false)
+            .addField("Members", strMembers, false)
             .build();
         }
         if (error != null)
             emb = emb.withDescription(error);
+        updateMessage();
     }
 
     @Override
     protected void executeAction(String action) {
-        log.info("Selected action: " + action);
         switch (action) {
             case "❓":
                 iconHelp();
@@ -83,26 +88,34 @@ public class ServerRegistrationEmbed extends EmbedManager{
                 break;
 
             case "✅":
-                if (this.author != null) {
-                    Boolean repoValidated = serverRegistrationCallback.test(author, repoName);
-                    if (repoValidated) {
+                if (path != null) {
+                    Boolean groupValidated = groupRegistrationCallback.test(path);
+                    if (groupValidated) {
                         end();
-                        App.sessions.remove(userId + "-" + serverId);
-                        canal.createMessage("Server registered successfully!").block();
                     } else {
-                        this.error = "This repository does not have Dialgit installed!";
+                        error = "This group is not accesible!";
                         updateEmbed();
-                        updateMessage();
                     }
                 } else {
-                    this.error = "No repository was selected!";
+                    error = "No group was selected!";
                     updateEmbed();
-                    updateMessage();
+                    
                 }
                 break;
 
             default:
                 break;
         }
+    }
+
+    @Override
+    protected void end() {
+        log.debug("Deleting embed");
+        if (!readOnly) {
+            fluxDisposer.dispose();
+        }
+        msg.delete().block();
+        App.sessions.remove(userId + "-" + serverId);
+        canal.createMessage("Server registered successfully! Type \"dg!start\" again to continue").block();
     }
 }

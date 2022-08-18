@@ -17,6 +17,7 @@ import com.google.cloud.dialogflow.v2.SessionName;
 import com.google.cloud.dialogflow.v2.SessionsClient;
 import com.google.cloud.dialogflow.v2.TextInput;
 
+//Controlador de la API DialogFlow
 public class DialogflowManager {
     private GoogleCredentials googleCredentials;
     private static final String CREDENTIALS = Secrets.GOOGLE_CREDENTIALS;
@@ -39,7 +40,7 @@ public class DialogflowManager {
     public String simpleDetect(String message, String sessionId) {
         log.info("Sending query with session [" + sessionId + "]");
         try {
-            this.googleCredentials.refreshIfExpired();
+            googleCredentials.refreshIfExpired();
             SessionsClient sessionsClient = SessionsClient.create();
             SessionName session = SessionName.of(PROJECT, sessionId);
             TextInput.Builder textInput =
@@ -58,7 +59,7 @@ public class DialogflowManager {
     public String getDate(String message, String sessionId) {
         log.info("Sending query with session [" + sessionId + "]");
         try {
-            this.googleCredentials.refreshIfExpired();
+            googleCredentials.refreshIfExpired();
             SessionsClient sessionsClient = SessionsClient.create();
             SessionName session = SessionName.of(PROJECT, sessionId);
             TextInput.Builder textInput =

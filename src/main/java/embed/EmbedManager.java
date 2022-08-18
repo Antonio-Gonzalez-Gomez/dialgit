@@ -3,6 +3,7 @@ package embed;
 import java.text.Format;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -26,6 +27,7 @@ import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import managers.App;
 
+//Clase padre de los controladores de embed
 public class EmbedManager {
     public static final String EMPTY_FIELD = "\u200B";
     protected static final Logger log = LogManager.getLogger();
@@ -65,17 +67,18 @@ public class EmbedManager {
         //Método abstracto, debe ser declarado para definir el método send()
     }
 
+    //Lanza el mensaje embed y el flujo reactivo que controla los botones si es necesario
     public void send() {
         log.debug("Sending embed");
-        this.msg = canal.createMessage(emb).block();
-        if (!this.readOnly) {
+        msg = canal.createMessage(emb).block();
+        if (!readOnly) {
             actions.forEach(x -> msg.addReaction(x).block());
             //Flujo de reacciones, si se queda inactivo por más de 3 minutos
             //lanza una TimeoutException y finaliza el flujo
             Flux<ReactionAddEvent> flux = gateway.getEventDispatcher().on(ReactionAddEvent.class)
                 .timeout(Duration.ofMinutes(3)).doFinally(x -> endFlux());
             
-            this.fluxDisposer = flux.subscribe(ev -> {
+            fluxDisposer = flux.subscribe(ev -> {
                 if (ev.getMessage().block().equals(msg) && 
                 ev.getUser().block().getId().asString().equals(userId)) {
                     ReactionEmoji emj = ev.getEmoji();
@@ -101,19 +104,21 @@ public class EmbedManager {
     }
 
     protected void updateMessage() {
-        msg.edit(MessageEditSpec.builder().addEmbed(emb).build()).block();
+        if (msg != null)
+            msg.edit(MessageEditSpec.builder().addEmbed(emb).build()).block();
     }
 
     protected void end() {
         log.debug("Deleting embed");
-        if (!this.readOnly) {
-            this.fluxDisposer.dispose();
+        if (!readOnly) {
+            fluxDisposer.dispose();
         }
         msg.delete().block();
         App.sessions.put(userId + "-" + serverId, "Start");
         canal.createMessage("Can I help you with something more?").block();
     }
 
+    //Lanza el mensaje de ayuda de los botones
     protected void iconHelp() {
         log.info("Sending icon help embed");
         EmbedCreateSpec helpEmbed = EmbedCreateSpec.builder()
@@ -121,7 +126,7 @@ public class EmbedManager {
             .title("Icons legend")
             .build();
         List<Field> fields = new ArrayList<>();
-        for (ReactionEmoji emj : this.actions) {
+        for (ReactionEmoji emj : actions) {
             String unicode = emj.asUnicodeEmoji().orElse(ReactionEmoji.unicode("🤓")).getRaw();
             switch (unicode) {
                 case "⬆️":
@@ -171,6 +176,10 @@ public class EmbedManager {
                 case "➕":
                     fields.add(Field.of("➕", "Add a new column.", false));
                     break;
+
+                case "🇪":
+                    fields.add(Field.of("🇪", "Convert issue to Epic.", false));
+                    break;
                 default:
                     break;
             }
@@ -179,6 +188,7 @@ public class EmbedManager {
         canal.createMessage(helpEmbed).block();
     }
 
+    //Lanza el mensaje de ayuda general
     public static EmbedCreateSpec tutorialEmbed() { 
         log.info("Sending tutorial help embed");
         return EmbedCreateSpec.builder()
@@ -187,23 +197,37 @@ public class EmbedManager {
             .url("https://github.com/apps/dialgit")
             .addField("Dialgit Tutorial", "DialGit is a work group management bot that relies on natural " + 
                 "speech processing to perform its duties. It will link your Discord server to your Github " + 
-                "repository to translate your planning into Github projects, issues and milestones.", false)
+                "repositories and Gitlab group to translate your planning into kanban boards and issues.", false)
 
-            .addField("How do I link it to my Github repository?", "You must first install Dialgit in your " + 
-                "Github repository by clicking on the link above. Then, simply type \"dg!start\" to start a " + 
-                "conversation with the bot. It will request your repository url and your Github username to " + 
-                "link it, and after that you are good to go!", false)
+            .addField("How do I link it?", "You must first install Dialgit in your " + 
+                "Github repositories by clicking on the link above. Then, you must create a Gitlab group and " +
+                "import those Github repositories in there. After all that, simply type \"dg!start\" to start a " + 
+                "conversation with the bot. It will request the urls to your group and repositories and your " + 
+                "Github username... and you will be good to go!", false)
 
-            .addField("How does it work?", "After typing \"dg!start\", you can request to create a project " + 
-                "or list them, to create a milestone or list them, to create an issue and to show this help " + 
-                "message. For example, if you wanna see your projects, you can type \"show me the projects\" " + 
-                "or \"I need to see the Github projects\" and DialGit will know what to do. ", false)
+            .addField("How does it work?", "After typing \"dg!start\", you can request one of several actions. " +
+                "Try to keep your petitions simple so DialGit can understand, for example \"I want to add a Github issue\". " +
+                "Here's a list of all things you can ask DialGit to do: \n" +
+                "- Show this help message.\n" +
+                "- Create an issue in a Github repository.\n" +
+                "- Create a workspace in a Github repository.\n" +
+                "- List all workspaces in a Github repository.\n" +
+                "- List all Sprints in a Github workspace.\n" +
+                "- Modify the Sprint configuration in a Github workspace.\n" +
+                "- Perform a status report of your remaining work for an ongoing Github Sprint.\n" +
+                "- Perform a group analysis of a Github Sprint.\n" +
+                "- Perform an individual analysis of a Github Sprint.\n" +
+                "- Create a board in a Gitlab repository.\n" +
+                "- List all boards in a Gitlab repository.\n" +
+                "- Create an issue in a Gitlab repository.\n" , false)
                 
             .addField("How do I interact with the bot?", "DialGit embeds use reaction emojis as buttons, so " + 
-                "you can simply click on them. If you have doubts, click the :question: button to see all " + 
-                "buttons functionality. If you want to add information (like creating an issue), you can " + 
-                "directly type the data field by field. You can also type the name of an element in a list " + 
-                "of elements to select it.", false)
+                "you can simply click on them. If you have doubts about what they do, click the :question: " +
+                "button to see all buttons functionality. If you want to add information (like creating an issue), " + 
+                "you can directly type the data field by field. You can also type the name of an element in a list " + 
+                "of elements to select it. Additionally, when inputting a date, you can use almost any expression " + 
+                "(like \"tomorrow\", \"next Friday\" or \"the 20th of July\") to do so.", false)
+
             .build();
     }
 
@@ -222,6 +246,11 @@ public class EmbedManager {
     }
 
     protected static String dateParse(Date date) {
+        Format formatter = new SimpleDateFormat("dd-MM-yyyy");
+        return formatter.format(date);
+    }
+
+    protected static String dateTimeParse(LocalDateTime date) {
         Format formatter = new SimpleDateFormat("dd-MM-yyyy");
         return formatter.format(date);
     }

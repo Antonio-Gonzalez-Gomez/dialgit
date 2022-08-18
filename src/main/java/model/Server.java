@@ -9,15 +9,13 @@ import javax.persistence.Table;
 @Entity
 @Table(name = "server")
 public class Server implements Serializable {
+    
     @Id
-    @Column(name = "server_id", unique = true)
+    @Column(name = "id", unique = true)
     private long id;
 
-    @Column(name = "server_url", nullable = false)
+    @Column(name = "url", nullable = false)
     private String url;
-
-    @Column(name = "server_installation", nullable = false)
-    private int installation;
 
     public long getId() {
         return id;
@@ -35,16 +33,8 @@ public class Server implements Serializable {
         this.url = url;
     }
 
-    public int getInstallation() {
-        return installation;
-    }
-
-    public void setInstallation(int installation) {
-        this.installation = installation;
-    }
-
     @Override
     public String toString() {
-        return id + "\t" + url + "\t" + installation;
+        return id + "\t" + url;
     }
 }

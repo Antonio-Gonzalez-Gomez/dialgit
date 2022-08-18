@@ -9,6 +9,7 @@ import discord4j.core.GatewayDiscordClient;
 import discord4j.core.object.entity.channel.MessageChannel;
 import managers.Secrets;
 
+//Demo para la API de Discord
 public final class DiscordDemo {
     private static final String TOKEN = Secrets.DISCORD_TOKEN;
     private static final String GUILD_ID = Secrets.DISCORD_TEST_GUILD;

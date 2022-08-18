@@ -3,16 +3,11 @@ package embed;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.kohsuke.github.GHIssue;
-import org.kohsuke.github.GHIssueState;
-import org.kohsuke.github.GHMilestone;
-import org.kohsuke.github.GHProject;
-import org.kohsuke.github.GHProjectCard;
-import org.kohsuke.github.GHProjectColumn;
 import org.kohsuke.github.GHRepository;
-
+import org.kohsuke.github.GHUser;
 import discord4j.core.GatewayDiscordClient;
 import discord4j.core.object.entity.channel.MessageChannel;
 import discord4j.core.object.reaction.ReactionEmoji;
@@ -20,122 +15,117 @@ import discord4j.core.spec.EmbedCreateFields.Field;
 import discord4j.core.spec.EmbedCreateFields.Footer;
 import discord4j.core.spec.EmbedCreateSpec;
 import discord4j.rest.util.Color;
+
 import managers.App;
+import managers.ZenhubManager;
+import pojo.Pipeline;
+import pojo.Sprint;
+import pojo.ZHIssue;
 
 public class KanbanEmbed extends EmbedManager{
-    
-    private List<GHProjectColumn> columns;
-    private List<GHIssue> selectedColumnIssues;
-    private int selectedColumn;
+
+    private List<Pipeline> pipelines;
+    private int selectedPipeline;
+    private List<ZHIssue> selectedPipelineIssues;
     private int selectedPage;
     private int maxPage;
-    private IssueEmbed selectedIssue;
-    private GHProjectCard selectedCard;
+    private IssueEmbed auxIssueEmbed;
+    private ZHIssue holdedIssue;
+    private int holdedIssuePipeline;
     private boolean onlySelfAssigned;
+    private GHUser user;
+    private String workspaceID;
 
     public KanbanEmbed(String userId, String serverId, MessageChannel canal, GatewayDiscordClient gateway,
-            GHRepository repo, Boolean readOnly, GHProject project) {
-        super(userId, serverId, canal, gateway, repo, readOnly);
-        try {
-            this.columns = project.listColumns().toList();
-            this.selectedColumn = 0;
-            this.selectedColumnIssues = columns.get(0).listCards().toList().stream()
-                .map(x -> {
-                    try {
-                        System.out.println(x.getContent().getTitle());
-                        return x.getContent();
-                    } catch (IOException e) {
-                        log.error(e.getMessage());
-                        return null;
-                    }
-                }).collect(Collectors.toList());
-            this.selectedField = 0;
-            this.maxField = selectedColumnIssues.size() - 1;
-            this.selectedPage = 0;
-            this.maxPage = this.maxField/ 10;
-            if (selectedColumnIssues.size() > 10)
-                this.maxField = 9;
-            if (!selectedColumnIssues.isEmpty())
-                this.selectedIssue = new IssueEmbed(userId, serverId, canal, gateway, repo, true,
-                    "Issue data", selectedColumnIssues.get(0).getTitle(), selectedColumnIssues.get(0).getBody(), selectedColumnIssues.get(0), null);
-            else
-                this.selectedIssue = new IssueEmbed(userId, serverId, canal, gateway, repo,
-                    true, "Issue data", EMPTY_FIELD, EMPTY_FIELD, null, null);
-            this.onlySelfAssigned = false;
-            this.actions = new ArrayList<>();
-            this.actions.add(ReactionEmoji.unicode("❓"));
-            this.actions.add(ReactionEmoji.unicode("⬆️"));
-            this.actions.add(ReactionEmoji.unicode("⬇️"));
-            this.actions.add(ReactionEmoji.unicode("⬅️"));
-            this.actions.add(ReactionEmoji.unicode("➡️"));
-            this.actions.add(ReactionEmoji.unicode("❌"));
-            this.actions.add(ReactionEmoji.unicode("👤"));
-            this.actions.add(ReactionEmoji.unicode("🔐"));
-            this.actions.add(ReactionEmoji.unicode("◀️"));
-            this.actions.add(ReactionEmoji.unicode("💠"));
-            this.actions.add(ReactionEmoji.unicode("▶️"));
-            this.actions.add(ReactionEmoji.unicode("✏️"));
-            updateEmbed();
-        } catch (IOException e) {
-            log.error(e.getMessage());
-        }
+            GHRepository repo, String workspaceID, GHUser user) {
+    super(userId, serverId, canal, gateway, repo, false);
+        this.workspaceID = workspaceID;
+        this.pipelines =  ZenhubManager.getPipelines(workspaceID, repo);
+        this.selectedPipeline = 0;
+        this.selectedField = 0;
+        this.selectedPipelineIssues = pipelines.get(selectedPipeline).getIssues();
+        this.maxField = selectedPipelineIssues.size() - 1;
+        this.selectedPage = 0;
+        this.maxPage = this.maxField/ 10;
+        Map<String, List<Sprint>> auxDict = ZenhubManager.getIssueToSprintMap(repo);
+        List<Sprint> sprints = ZenhubManager.getSprints(repo);
+        if (selectedPipelineIssues.size() > 10)
+            this.maxField = 9;
+        if (!selectedPipelineIssues.isEmpty())
+            this.auxIssueEmbed = new IssueEmbed(userId, serverId, canal, gateway, repo, true,
+                "Issue data", selectedPipelineIssues.get(0).getGhIssue().getTitle(), selectedPipelineIssues.get(0).getGhIssue().getBody(),
+                selectedPipelineIssues.get(0), sprints, auxDict);
+        else
+            this.auxIssueEmbed = new IssueEmbed(userId, serverId, canal, gateway, repo,
+                true, "Issue data", EMPTY_FIELD, EMPTY_FIELD, null, sprints, auxDict);
+        this.onlySelfAssigned = false;
+        this.user = user;        
+        this.actions = new ArrayList<>();
+        this.actions.add(ReactionEmoji.unicode("❓"));
+        this.actions.add(ReactionEmoji.unicode("⬆️"));
+        this.actions.add(ReactionEmoji.unicode("⬇️"));
+        this.actions.add(ReactionEmoji.unicode("⬅️"));
+        this.actions.add(ReactionEmoji.unicode("➡️"));
+        this.actions.add(ReactionEmoji.unicode("❌"));
+        this.actions.add(ReactionEmoji.unicode("👤"));
+        this.actions.add(ReactionEmoji.unicode("🔐"));
+        this.actions.add(ReactionEmoji.unicode("◀️"));
+        this.actions.add(ReactionEmoji.unicode("💠"));
+        this.actions.add(ReactionEmoji.unicode("▶️"));
+        this.actions.add(ReactionEmoji.unicode("✏️"));
+        updateEmbed();
     }
 
     public void sendSecondEmbed() {
-        selectedIssue.send();
+        auxIssueEmbed.send();
     }
 
-    private GHIssue getSelectedIssue() {
-        return selectedColumnIssues.get(selectedField + selectedPage * 10);
+    private ZHIssue getEmbedIssue() {
+        return selectedPipelineIssues.get(selectedField + selectedPage * 10);
     }
 
     public void inputSelect(String input) {
         log.info("Selecting new element: " + input);
-        int lastSelected = (selectedPage + 1) * 10 > selectedColumnIssues.size() ? selectedColumnIssues.size() : (selectedPage + 1) * 10;
-        List<GHIssue> sublist = selectedColumnIssues.subList(selectedPage * 10, lastSelected);
-        GHIssue inputIssue = sublist.stream().filter(x -> x.getTitle().equals(input)).findAny().orElse(null);
+        int lastSelected = (selectedPage + 1) * 10 > selectedPipelineIssues.size() ? selectedPipelineIssues.size() : (selectedPage + 1) * 10;
+        List<ZHIssue> sublist = selectedPipelineIssues.subList(selectedPage * 10, lastSelected);
+        ZHIssue inputIssue = sublist.stream().filter(x -> x.getGhIssue().getTitle().equals(input)).findAny().orElse(null);
         if (inputIssue != null) {
             selectedField = sublist.indexOf(inputIssue);
-            selectedIssue.selectNewIssue(getSelectedIssue());
+            auxIssueEmbed.selectNewIssue(getEmbedIssue());
             updateEmbed();
-            updateMessage();
+            
         }
     }
 
     private void updateEmbed() {
-        int lastSelected = (selectedPage + 1) * 10 > selectedColumnIssues.size() ? selectedColumnIssues.size() : (selectedPage + 1) * 10;
+        int lastSelected = (selectedPage + 1) * 10 > selectedPipelineIssues.size() ? selectedPipelineIssues.size() : (selectedPage + 1) * 10;
         String desc = EMPTY_FIELD;
-        if (selectedCard != null)
-            try {
-                desc = "Holding issue: " + selectedCard.getContent().getTitle();
-            } catch (IOException e) {
-                log.error(e.getMessage());
-            }
-        List<GHIssue> sublist = selectedColumnIssues.subList(selectedPage * 10, lastSelected);
+        if (holdedIssue != null)
+            desc = "Holding issue: " + holdedIssue.getGhIssue().getTitle();
+        List<ZHIssue> sublist = selectedPipelineIssues.subList(selectedPage * 10, lastSelected);
         String footer = null;
         if (maxPage > 0) {
-            Integer total = selectedColumnIssues.size();
+            Integer total = selectedPipelineIssues.size();
             Integer inicio = selectedPage * 10;
             Integer fin = inicio + 10 > total ? total : inicio + 10;
             footer = "Showing issues " + inicio + "-" + fin + " of " + total;
         }
         emb = EmbedCreateSpec.builder()
             .color(Color.LIGHT_SEA_GREEN)
-            .title(columns.get(selectedColumn).getName())
+            .title(pipelines.get(selectedPipeline).getName())
             .description(desc)
             .build();
         List<Field> fields = sublist.stream().map(x -> sublist.indexOf(x) == selectedField ?
-            Field.of("-> " + x.getTitle() + " <-", String.valueOf(x.getId()), false) : 
-            Field.of(x.getTitle(), String.valueOf(x.getId()), false)).collect(Collectors.toList());
+            Field.of("-> " + x.getGhIssue().getTitle() + " <-", "#-" + String.valueOf(x.getNumber()), false) : 
+            Field.of(x.getGhIssue().getTitle(), "#-" + String.valueOf(x.getNumber()), false)).collect(Collectors.toList());
         emb = emb.withFields(fields);
         if (footer != null)
             emb = emb.withFooter(Footer.of(footer, "https://64.media.tumblr.com/aa65057a2ba418757cee5ae25c07d790/tumblr_pb2ky0qi6A1w6xh18o8_250.png"));
-        
+        updateMessage();
     }
 
     @Override
     protected void executeAction(String action) {
-        log.info("Selected action: " + action);
         switch (action) {
             case "❓":
                 iconHelp();
@@ -144,36 +134,36 @@ public class KanbanEmbed extends EmbedManager{
             case "⬆️":
                 if (maxField > 0) {
                     selectedField = selectedField == 0 ? maxField : selectedField - 1;
-                    selectedIssue.selectNewIssue(getSelectedIssue());
+                    auxIssueEmbed.selectNewIssue(getEmbedIssue());
                     updateEmbed();
-                    updateMessage();
+                    
                 }
                 break;
             
             case "⬇️":
                 if (maxField > 0) {
                     selectedField = selectedField == maxField ? 0 : selectedField + 1;
-                    selectedIssue.selectNewIssue(getSelectedIssue());
+                    auxIssueEmbed.selectNewIssue(getEmbedIssue());
                     updateEmbed();
-                    updateMessage();
+                    
                 }
                 break;
 
             case "⬅️":
                 if (maxPage > 0) {
                     selectedPage = selectedPage == 0 ? maxPage : selectedPage - 1;
-                    selectedIssue.selectNewIssue(getSelectedIssue());
+                    auxIssueEmbed.selectNewIssue(getEmbedIssue());
                     updateEmbed();
-                    updateMessage();
+                    
                 }
                 break;
 
             case "➡️":
                 if (maxPage > 0) {
                     selectedPage = selectedPage == maxPage ? 0 : selectedPage + 1;
-                    selectedIssue.selectNewIssue(getSelectedIssue());
+                    auxIssueEmbed.selectNewIssue(getEmbedIssue());
                     updateEmbed();
-                    updateMessage();
+                    
                 }
                 break;
 
@@ -185,161 +175,125 @@ public class KanbanEmbed extends EmbedManager{
 
             case "👤":
                 onlySelfAssigned = !onlySelfAssigned;
+                if (onlySelfAssigned)
+                    selectedPipelineIssues = pipelines.get(selectedPipeline).getIssues()
+                        .stream().filter(x -> x.getGhIssue().getAssignees().contains(user))
+                        .collect(Collectors.toList());
+                else
+                    selectedPipelineIssues = pipelines.get(selectedPipeline).getIssues();
                 updateEmbed();
-                updateMessage();
+                
                 break;
 
             case "🔐":
-                if (selectedIssue.issue != null) {
-                    GHIssue mlst = selectedIssue.issue;
+                if (auxIssueEmbed.issue != null) {
+                    ZHIssue iss = auxIssueEmbed.issue;
                     try {
-                        if (mlst.getState().toString().equals("CLOSED"))
-                            mlst.reopen();
+                        if (iss.getGhIssue().getState().toString().equals("CLOSED"))
+                            iss.getGhIssue().reopen();
                         else
-                            mlst.close();
-                        selectedIssue.selectNewIssue(getSelectedIssue());
-                        int temp = selectedColumnIssues.size();
-                        selectedColumnIssues = columns.get(selectedColumn).listCards().toList().stream()
-                            .map(x -> {
-                                try {
-                                    return x.getContent();
-                                } catch (IOException e) {
-                                    log.error(e.getMessage());
-                                    return null;
-                                }
-                            }).collect(Collectors.toList());
-                        if (temp > selectedColumnIssues.size()) {
-                            if (!selectedColumnIssues.isEmpty())
-                                selectedIssue.selectNewIssue(selectedColumnIssues
+                            iss.getGhIssue().close();
+                        //Al cerrar issues, estas se pueden mover de pipeline
+                        pipelines = ZenhubManager.getPipelines(workspaceID, repo);
+                        int temp = selectedPipelineIssues.size();
+                        selectedPipelineIssues = pipelines.get(selectedPipeline).getIssues();
+                        if (temp > selectedPipelineIssues.size()) {
+                            if (!selectedPipelineIssues.isEmpty())
+                                auxIssueEmbed.selectNewIssue(selectedPipelineIssues
                                     .get(selectedField == 0 ? 0 : --selectedField));
                             else
-                                selectedIssue.selectNewIssue(null);
+                                auxIssueEmbed.selectNewIssue(null);
                             updateEmbed();
-                            updateMessage();
                         }
+                        auxIssueEmbed.selectNewIssue(iss);
                     } catch(IOException ex) {
                         log.error(ex.getMessage());
                     }
-                    selectedIssue.updateEmbed();
-                    selectedIssue.updateMessage();
+                    auxIssueEmbed.updateEmbed();
                 }
                 break;
 
             case "◀️":
-                try {
-                    selectedColumn = selectedColumn == 0 ? columns.size() - 1 : selectedColumn - 1;
-                    selectedColumnIssues = columns.get(selectedColumn).listCards().toList().stream()
-                    .map(x -> {
-                        try {
-                            return x.getContent();
-                        } catch (IOException e) {
-                            log.error(e.getMessage());
-                            return null;
-                        }
-                    }).collect(Collectors.toList());
-                    if (!selectedColumnIssues.isEmpty())
-                        selectedIssue.selectNewIssue(selectedColumnIssues.get(0));
-                    else
-                        selectedIssue.selectNewIssue(null);
-                    selectedField = 0;
-                    maxField = selectedColumnIssues.size() - 1;
-                    selectedPage = 0;
-                    maxPage = this.maxField/ 10;
-                    updateEmbed();
-                    updateMessage();
-                } catch (IOException e) {
-                    log.error(e.getMessage());
-                }
+                selectedPipeline = selectedPipeline == 0 ? pipelines.size() - 1 : selectedPipeline - 1;
+                selectedPipelineIssues = pipelines.get(selectedPipeline).getIssues();
+                if (onlySelfAssigned)
+                    selectedPipelineIssues = selectedPipelineIssues.stream()
+                        .filter(x -> x.getGhIssue().getAssignees().contains(user))
+                        .collect(Collectors.toList());
+                if (!selectedPipelineIssues.isEmpty())
+                    auxIssueEmbed.selectNewIssue(selectedPipelineIssues.get(0));
+                else
+                    auxIssueEmbed.selectNewIssue(null);
+                selectedField = 0;
+                maxField = selectedPipelineIssues.size() - 1;
+                selectedPage = 0;
+                maxPage = maxField/ 10;
+                updateEmbed();
+                
                 break;
 
             case "💠":
-                if (selectedCard == null) {
-                    if (!selectedColumnIssues.isEmpty()) {
-                        try {
-                            selectedCard = columns.get(selectedColumn).listCards().toList().stream()
-                                .filter(x -> {
-                                    try {
-                                        return x.getContent().getId() == getSelectedIssue().getId();
-                                    } catch (IOException e) {
-                                        log.error(e.getMessage());
-                                        return false;
-                                    }
-                                }).findFirst().orElse(null);
-                            updateEmbed();
-                            updateMessage();
-                        } catch (IOException e) {
-                            log.error(e.getMessage());
-                        }
+                if (holdedIssue == null) {
+                    if (!selectedPipelineIssues.isEmpty()) {
+                        holdedIssue = getEmbedIssue();
+                        holdedIssuePipeline = selectedPipeline;
+                        updateEmbed();
+                        
                     }
                 } else {
-                    try {
-                        if (!selectedCard.getColumn().equals(columns.get(0))) {
-                            GHIssue issueToMove = selectedCard.getContent();
-                            selectedCard.delete();
-                            selectedCard = null;
-                            columns.get(selectedColumn).createCard(issueToMove);
-                            selectedColumnIssues = columns.get(selectedColumn).listCards().toList().stream()
-                                .map(x -> {
-                                    try {
-                                        return x.getContent();
-                                    } catch (IOException e) {
-                                        log.error(e.getMessage());
-                                        return null;
-                                    }
-                                }).collect(Collectors.toList());
-                            if (selectedColumnIssues.size() == 1)
-                                selectedIssue.selectNewIssue(selectedColumnIssues.get(0));
-                            updateEmbed();
-                            updateMessage();
-                        }
-                    } catch (IOException e) {
-                        log.error(e.getMessage());
+                    Pipeline selected = pipelines.get(selectedPipeline);
+                    if (!selected.getIssues().contains(holdedIssue)) {
+                        
+                        String pipeId = selected.getId();
+                        ZenhubManager.moveIssue(holdedIssue.getZenhubId(), pipeId);
+                        selected.addIssue(holdedIssue);
+                        selectedPipelineIssues = selected.getIssues();
+                        pipelines.get(holdedIssuePipeline).removeIssue(holdedIssue);
+                        holdedIssue = null;
+                        if (selectedPipelineIssues.size() == 1)
+                        //Si la pipeline estaba vacía, hay que seleccionar la issue para el embed de abajo
+                            auxIssueEmbed.selectNewIssue(selectedPipelineIssues.get(0));
+                        updateEmbed();
+                        
                     }
-                    
                 }
                 break;
 
             case "▶️":
-                try {
-                    selectedColumn = selectedColumn == columns.size() - 1 ? 0 : selectedColumn + 1;
-                    selectedColumnIssues = columns.get(selectedColumn).listCards().toList().stream()
-                    .map(x -> {
-                        try {
-                            return x.getContent();
-                        } catch (IOException e) {
-                            log.error(e.getMessage());
-                            return null;
-                        }
-                    }).collect(Collectors.toList());
-
-                    if (!selectedColumnIssues.isEmpty())
-                        selectedIssue.selectNewIssue(selectedColumnIssues.get(0));
-                    else
-                        selectedIssue.selectNewIssue(null);
-                    selectedField = 0;
-                    maxField = selectedColumnIssues.size() - 1;
-                    selectedPage = 0;
-                    maxPage = this.maxField/ 10;
-                    updateEmbed();
-                    updateMessage();
-                } catch (IOException e) {
-                    log.error(e.getMessage());
-                }
+                selectedPipeline = selectedPipeline == pipelines.size() - 1 ? 0 : selectedPipeline + 1;
+                selectedPipelineIssues = pipelines.get(selectedPipeline).getIssues();
+                if (onlySelfAssigned)
+                    selectedPipelineIssues = selectedPipelineIssues.stream()
+                        .filter(x -> x.getGhIssue().getAssignees().contains(user))
+                        .collect(Collectors.toList());
+                if (!selectedPipelineIssues.isEmpty())
+                    auxIssueEmbed.selectNewIssue(selectedPipelineIssues.get(0));
+                else
+                    auxIssueEmbed.selectNewIssue(null);
+                selectedField = 0;
+                maxField = selectedPipelineIssues.size() - 1;
+                selectedPage = 0;
+                maxPage = maxField/ 10;
+                updateEmbed();
+                
                 break;
 
             case "✏️":
+                ZHIssue issue = auxIssueEmbed.issue;
                 try {
-                    GHIssue issue = selectedIssue.issue;
-                    List<GHMilestone> lista = repo.listMilestones(GHIssueState.valueOf("OPEN")).toList();
+                    end();
+                    issue.setGhIssue(repo.getIssue(issue.getNumber()));
+                    List<Sprint> sprints = ZenhubManager.getSprints(repo);
+                    Map<String, List<Sprint>> auxDict = ZenhubManager.getIssueToSprintMap(repo);
                     IssueEmbed manager = new IssueEmbed(userId, serverId, canal, gateway, repo,
-                        false, "Edit issue", issue.getTitle(), issue.getBody(), issue, lista);
+                        false, "Edit issue", issue.getGhIssue().getTitle(), issue.getGhIssue().getBody(),
+                        issue, sprints, auxDict);
                     manager.send();
                     App.embedDict.put(userId + "-" + serverId, manager);
                     App.sessions.put(userId + "-" + serverId, "InputIssue");
                 } catch (IOException e) {
-                    log.error(e.getMessage());
+                    log.error(e);
                 }
-                end();
                 break;
 
             default:
@@ -350,8 +304,8 @@ public class KanbanEmbed extends EmbedManager{
     @Override
     protected void end() {
         log.debug("Deleting embed");
-        this.fluxDisposer.dispose();
+        fluxDisposer.dispose();
         msg.delete().block();
-        selectedIssue.msg.delete().block();
+        auxIssueEmbed.msg.delete().block();
     }
 }
